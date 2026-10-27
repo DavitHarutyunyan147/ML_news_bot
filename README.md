@@ -1,4 +1,4 @@
-# ML_bot
+# ML_news_bot
 # Armenian News Classifier Bot 🇦🇲
 
 A Telegram bot powered by Machine Learning that automatically classifies Armenian news articles into three categories: **Politics, Culture, and Sports**.

@@ -1,4 +1,3 @@
-
 import csv
 import re
 import time
@@ -14,9 +13,10 @@ SECTIONS = {
     "Սպորտ": "https://www.aravot.am/category/news/sport/",
 }
 
-NEWS_COUNT = 44
+TOTAL_COUNT = 1000
+EXTRA_LINKS = 1.2
 LINES_COUNT = 10
-MAX_LISTING_PAGES = 30
+MAX_LISTING_PAGES = 100
 REQUEST_DELAY = 0.5
 OUTPUT_FILE = "news.csv"
 
@@ -72,8 +72,6 @@ def is_article_url(url):
 
 
 def get_listing_links(soup, page_url, section):
-    """Հավաքում է տվյալ բաժնի հոդվածների հղումները։"""
-
     heading = None
 
     for tag in soup.find_all(["h1", "h2", "h3", "h4"]):
@@ -86,7 +84,6 @@ def get_listing_links(soup, page_url, section):
         return []
 
     links = []
-    seen = set()
 
     for link in heading.find_all_next("a", href=True):
         classes = link.get("class", [])
@@ -100,19 +97,13 @@ def get_listing_links(soup, page_url, section):
 
         url = normalize_url(urljoin(page_url, link["href"]))
 
-        if not is_article_url(url):
-            continue
-
-        if url not in seen:
-            seen.add(url)
+        if is_article_url(url):
             links.append(url)
 
     return links
 
 
 def get_next_page(soup, current_url):
-    """Գտնում է հաջորդ էջը։"""
-
     current_path = urlparse(current_url).path
     match = re.search(r"/page/(\d+)/?$", current_path)
     current_number = int(match.group(1)) if match else 1
@@ -155,18 +146,16 @@ def get_next_page(soup, current_url):
     ))
 
 
-def collect_article_links(section, section_url):
+def collect_article_links(section, section_url, limit):
     collected = []
     seen = set()
     visited_pages = set()
     current_url = section_url
 
-    print(f"\n{'=' * 40}")
-    print(f"ԲԱԺԻՆ՝ {section}")
-    print(f"{'=' * 40}")
+    print(f"\nԲԱԺԻՆ՝ {section}")
 
     for page_number in range(1, MAX_LISTING_PAGES + 1):
-        if len(collected) >= NEWS_COUNT:
+        if len(collected) >= limit:
             break
 
         current_url = normalize_url(current_url)
@@ -176,53 +165,28 @@ def collect_article_links(section, section_url):
 
         visited_pages.add(current_url)
 
-        print(f"\nՑուցակի էջ {page_number}: {current_url}")
-
         soup = get_soup(current_url)
 
         if soup is None:
             break
 
-        page_links = get_listing_links(
-            soup,
-            current_url,
-            section
-        )
-
-        new_count = 0
-
-        for url in page_links:
+        for url in get_listing_links(soup, current_url, section):
             if url not in seen:
                 seen.add(url)
                 collected.append(url)
-                new_count += 1
 
-                if len(collected) >= NEWS_COUNT:
+                if len(collected) >= limit:
                     break
 
-        print(f"Նոր հղումներ՝ {new_count}")
-        print(f"Ընդհանուր հղումներ՝ {len(collected)}")
+        print(f"Էջ {page_number}՝ հղումներ {len(collected)}")
 
-        if len(collected) >= NEWS_COUNT:
-            break
-
-        next_url = get_next_page(soup, current_url)
-
-        if not next_url or normalize_url(next_url) in visited_pages:
-            break
-
-        current_url = next_url
+        current_url = get_next_page(soup, current_url)
         time.sleep(REQUEST_DELAY)
 
-    return collected[:NEWS_COUNT]
+    return collected
 
 
 def extract_article(url):
-    """
-    Գտնում է հոդվածի վերնագիրը և դրանից հետո գտնվող պարբերությունները։
-    Չի կախվում միայն .entry-content կամ article .content սելեկտորներից։
-    """
-
     soup = get_soup(url)
 
     if soup is None:
@@ -273,7 +237,6 @@ def extract_article(url):
 
             continue
 
-
         text = " ".join(element.get_text(" ", strip=True).split())
 
         if len(text) < 30:
@@ -306,18 +269,27 @@ def extract_article(url):
 
 def main():
     all_articles = []
-    counts = {}
+
+    per_section = TOTAL_COUNT // len(SECTIONS)
+    remainder = TOTAL_COUNT % len(SECTIONS)
+
+    section_number = 0
 
     for section, section_url in SECTIONS.items():
-        links = collect_article_links(section, section_url)
+        target = per_section
+        if section_number < remainder:
+            target = target + 1
+        section_number = section_number + 1
 
-        print(f"\n«{section}» բաժնի հղումները՝ {len(links)}")
+        links = collect_article_links(section, section_url, int(target * EXTRA_LINKS))
 
         successful = 0
 
         for index, url in enumerate(links, start=1):
-            print(f"\n[{section}] Հոդված {index}/{len(links)}")
-            print(url)
+            if successful >= target:
+                break
+
+            print(f"[{section}] {index}/{len(links)} (հաջող՝ {successful}/{target}) {url}")
 
             try:
                 article = extract_article(url)
@@ -332,41 +304,17 @@ def main():
             all_articles.append(article)
             successful += 1
 
-            print("Վերնագիր՝", article["title"])
-            print("Տեքստի երկարությունը՝", len(article["text"]))
-
             time.sleep(REQUEST_DELAY)
 
-        counts[section] = successful
-        print(f"\n«{section}» բաժնից ստացվեց՝ {successful}")
+        print(f"«{section}» բաժնից ստացվեց՝ {successful}")
 
-    with open(
-        OUTPUT_FILE,
-        "w",
-        newline="",
-        encoding="utf-8-sig"
-    ) as file:
-        writer = csv.DictWriter(
-            file,
-            fieldnames=["title", "text", "url", "section"]
-        )
+    with open(OUTPUT_FILE, "w", newline="", encoding="utf-8-sig") as file:
+        writer = csv.DictWriter(file, fieldnames=["title", "text", "url", "section"])
         writer.writeheader()
         writer.writerows(all_articles)
 
-    print("\n" + "=" * 40)
-    print("ՎԵՐՋՆԱԿԱՆ ԱՐԴՅՈՒՆՔ")
-    print("=" * 40)
-
-    for section in SECTIONS:
-        print(f"{section}: {counts.get(section, 0)}")
-
-    print(f"Ընդհանուր հոդվածներ՝ {len(all_articles)}")
-    print(f"CSV ֆայլ՝ {OUTPUT_FILE}")
-
-    if all(counts.get(s, 0) >= NEWS_COUNT for s in SECTIONS):
-        print("Բոլոր բաժիններից հավաքվել է 44 հոդված։")
-    else:
-        print("Որոշ բաժիններում 44 հոդվածից պակաս է հավաքվել։")
+    print(f"\nԸնդհանուր հոդվածներ՝ {len(all_articles)} (նպատակը՝ {TOTAL_COUNT})")
+    print(f"Պահվեց՝ {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

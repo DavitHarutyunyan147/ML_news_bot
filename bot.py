@@ -1,10 +1,10 @@
-
 import logging
 from pathlib import Path
 
 import joblib
 import telebot
 
+from sentiment import get_sentiment
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -17,8 +17,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
 
 
 if not TOKEN_PATH.is_file():
@@ -34,8 +32,6 @@ if not TOKEN:
     )
 
 print("Telegram token-ը հաջողությամբ կարդացվել է։")
-
-
 
 
 if not MODEL_PATH.is_file():
@@ -59,18 +55,15 @@ print("Մոդելը հաջողությամբ բեռնվել է։")
 print("Մոդելի դասերը՝", list(model.classes_))
 
 
-
-
 bot = telebot.TeleBot(TOKEN)
-
-
 
 
 @bot.message_handler(commands=["start", "help"])
 def start(message):
     response = (
         "Բարև։ Ես հայկական նորությունների դասակարգման բոտ եմ։\n\n"
-        "Ուղարկիր նորության տեքստը, և ես կփորձեմ որոշել դրա բաժինը։\n\n"
+        "Ուղարկիր նորության տեքստը, և ես կփորձեմ որոշել դրա բաժինը "
+        "և տոնայնությունը (դրական, բացասական կամ չեզոք)։\n\n"
         "Հասանելի բաժիններ՝\n"
         "• Քաղաքական\n"
         "• Մշակույթ\n"
@@ -79,8 +72,6 @@ def start(message):
     )
 
     bot.reply_to(message, response)
-
-
 
 
 @bot.message_handler(content_types=["text"])
@@ -94,10 +85,10 @@ def predict(message):
         )
         return
 
-    if len(text) < 50:
+    if len(text) < 20:
         bot.reply_to(
             message,
-            "Տեքստը շատ կարճ է։ Ուղարկիր առնվազն 50 նիշ "
+            "Տեքստը շատ կարճ է։ Ուղարկիր առնվազն 20 նիշ "
             "կամ ամբողջական նորությունը։"
         )
         return
@@ -107,26 +98,12 @@ def predict(message):
 
         response = f" Կանխատեսված բաժին՝ {prediction}"
 
-        if hasattr(model, "predict_proba"):
-            probabilities = model.predict_proba([text])[0]
+        sentiment, positive_percent, negative_percent, neutral_percent = get_sentiment(text)
 
-            results = sorted(
-                zip(model.classes_, probabilities),
-                key=lambda item: item[1],
-                reverse=True
-            )
-
-            response += "\n\nԲաժինների գնահատականները՝"
-
-            for section, probability in results:
-                response += (
-                    f"\n• {section}: {probability * 100:.1f}%"
-                )
-
-            response += (
-                "\n\nՆշում․ տոկոսները մոդելի գնահատականներն են, "
-                "ոչ թե երաշխավորված ճշտությունը։"
-            )
+        response += f"\n\nՆորության տոնայնությունը՝ {sentiment}"
+        response += f"\n• Դրական: {positive_percent:.1f}%"
+        response += f"\n• Բացասական: {negative_percent:.1f}%"
+        response += f"\n• Չեզոք: {neutral_percent:.1f}%"
 
         logger.info("Կանխատեսված բաժին՝ %s", prediction)
 
@@ -140,8 +117,6 @@ def predict(message):
             "Չհաջողվեց վերլուծել նորությունը։ "
             "Ստուգիր տերմինալի սխալը։"
         )
-
-
 
 
 if __name__ == "__main__":

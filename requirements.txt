@@ -3,3 +3,5 @@ joblib
 scikit-learn
 numpy
 scipy
+requests
+beautifulsoup4

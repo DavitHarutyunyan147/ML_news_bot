@@ -110,7 +110,7 @@ On Windows:
 
 ```bash
 python -m venv venv
-venv\\Scripts\\activate
+venv\Scripts\activate
 ```
 
 On Linux or macOS:

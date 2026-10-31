@@ -1,31 +1,30 @@
 # ML News Bot
 
-**ML News Bot** is a Python-based Telegram bot that combines Machine Learning, Web Scraping, and Natural Language Processing techniques to analyze Armenian news articles.
+**ML News Bot** is a Python-based Telegram bot for analyzing Armenian news articles. It combines web scraping, text classification with Machine Learning, and a lightweight keyword-based sentiment analysis component.
 
-The project collects news articles from [Aravot.am](https://www.aravot.am/), organizes them into categories, and uses a Machine Learning model to classify news. It also includes a keyword-based sentiment analysis component that identifies positive and negative language in submitted text.
-
-The main goal of this project is to explore how Python, Machine Learning, and automation can be combined to build a practical news analysis application.
+The project collects articles from [Aravot.am](https://www.aravot.am/), prepares a CSV dataset, trains a text-classification model, and makes the trained model available through a Telegram bot.
 
 ## Features
 
-- **News Scraping:** Automatically collects articles from Aravot.am.
-- **News Classification:** Uses a Machine Learning model to predict the category of a news article.
-- **Sentiment Analysis:** Analyzes text and identifies positive, negative, or neutral sentiment using predefined Armenian keywords.
-- **Telegram Integration:** Provides an accessible interface for interacting with the analysis system.
-- **Dataset Generation:** Collects and stores news articles in CSV format.
-- **Error Handling:** Includes basic exception handling and logging to improve reliability.
+- **News scraping:** Collects articles from the Politics, Culture, and Sport sections of Aravot.am.
+- **Dataset generation:** Saves article titles, text, URLs, and section labels to `news.csv`.
+- **News classification:** Uses a TF-IDF text representation and a Random Forest classifier to predict an article's section.
+- **Model selection:** Uses `GridSearchCV` to compare configured `max_depth` values.
+- **Sentiment analysis:** Estimates positive, negative, or neutral tone using predefined Armenian keywords.
+- **Telegram integration:** Lets users submit text and receive classification and sentiment results.
+- **Basic reliability measures:** Includes request timeouts, duplicate URL handling, logging, and exception handling.
 
 ## Technologies Used
 
 | Technology | Purpose |
 |---|---|
 | Python | Main programming language |
-| Scikit-learn | Machine Learning |
-| NumPy | Numerical operations |
-| SciPy | Scientific computing dependency |
-| Joblib | Loading the trained model |
+| pandas | Reading and processing the dataset |
+| Scikit-learn | TF-IDF, Random Forest, model selection, and evaluation |
+| NumPy / SciPy | Scientific computing dependencies |
+| Joblib | Saving and loading the trained model |
 | Requests | Sending HTTP requests |
-| BeautifulSoup4 | HTML parsing and web scraping |
+| BeautifulSoup4 | Parsing HTML during web scraping |
 | PyTelegramBotAPI | Telegram bot integration |
 | CSV | Dataset storage |
 
@@ -35,72 +34,66 @@ The main goal of this project is to explore how Python, Machine Learning, and au
 ML_news_bot/
 │
 ├── bot.py
-├── train.py
 ├── parser.py
+├── train.py
 ├── sentiment.py
 ├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
-### File Description
+### Main Files
 
-- **bot.py** — Main Telegram bot application. Handles user interactions, receives messages, loads the Machine Learning model, and provides analysis results.
-- **train.py** — Scrapes news articles from Aravot.am and generates a dataset in CSV format.
-- **parser.py** — Contains additional news parsing functionality.
-- **sentiment.py** — Implements keyword-based sentiment analysis for Armenian text.
-- **requirements.txt** — Contains the Python dependencies required by the project.
+- **`parser.py`** — Scrapes article links and article content from Aravot.am, then writes the collected records to `news.csv`.
+- **`train.py`** — Reads `news.csv`, prepares the text and labels, trains and evaluates a TF-IDF + Random Forest pipeline using `GridSearchCV`, and saves the selected model as `model.pkl`.
+- **`bot.py`** — Loads the Telegram token and trained model, handles incoming text messages, predicts the news category, and returns sentiment analysis results.
+- **`sentiment.py`** — Contains the Armenian positive and negative keyword lists and the `get_sentiment()` function.
+- **`requirements.txt`** — Lists the Python packages required by the project.
+- **`.gitignore`** — Excludes local files and generated artifacts that should not be committed.
 
 ## How It Works
 
-The project consists of several components that work together:
+The project has three main stages.
 
-### 1. News Scraping
+### 1. Collecting News
 
-The scraper collects articles from three main sections of Aravot.am:
+The scraper in `parser.py` visits the following Aravot.am sections:
 
 - Politics
 - Culture
 - Sport
 
-It extracts article information, including titles and text, and stores the collected data in a CSV file.
+It collects article titles, text, URLs, and category labels. The resulting dataset is saved to `news.csv` with these columns:
 
-The scraper also includes URL normalization, duplicate prevention, pagination handling, request timeouts, and delays between requests.
+| Column | Description |
+|---|---|
+| `title` | Article title |
+| `text` | Extracted article text |
+| `url` | Original article URL |
+| `section` | News category |
 
-### 2. Machine Learning Classification
+The scraper includes URL normalization, duplicate prevention, pagination handling, request timeouts, and a delay between requests. It targets approximately 1,000 articles across the three sections; the actual number may be lower if articles cannot be retrieved or parsed.
 
-The project uses a trained Machine Learning model to classify news articles into predefined categories.
+### 2. Training the Classification Model
 
-The model receives text as input and predicts the corresponding news category.
+The training script in `train.py`:
 
-The expected model file is:
+1. Reads `news.csv` using pandas.
+2. Removes rows with missing text or section labels.
+3. Removes duplicate article text.
+4. Splits the data into training and test sets.
+5. Builds a Scikit-learn pipeline with `TfidfVectorizer` and `RandomForestClassifier`.
+6. Uses `GridSearchCV` to search the configured maximum tree-depth values.
+7. Prints a classification report for the test set.
+8. Saves the fitted model to `model.pkl` using Joblib.
 
-```text
-model.pkl
-```
+The trained model is required by the Telegram bot.
 
-The model must be available locally for the Telegram bot to load and use it.
+### 3. Telegram Bot and Sentiment Analysis
 
-### 3. Sentiment Analysis
+The bot in `bot.py` loads `model.pkl` and uses its `predict()` method to classify submitted text. It also calls `get_sentiment()` from `sentiment.py` to estimate the text's tone.
 
-The sentiment analysis component is implemented in `sentiment.py`.
-
-It uses predefined lists of positive and negative Armenian words to analyze submitted text.
-
-Based on the detected keywords, the system calculates sentiment scores and determines whether the text is:
-
-- Positive
-- Negative
-- Neutral
-
-This is a rule-based approach rather than a trained Deep Learning model.
-
-### 4. Telegram Bot
-
-The Telegram bot connects the different components into one application.
-
-Users can send text messages and receive analysis results directly through Telegram.
-
-The bot uses the Machine Learning model for news classification and the sentiment analysis module for evaluating text sentiment.
+The sentiment component counts occurrences of predefined positive and negative Armenian keywords. It is a simple rule-based heuristic, not a context-aware language model. Its percentage values are based on the detected keyword counts and a small neutral baseline; they should not be interpreted as a human-level understanding of sentiment.
 
 ## Installation
 
@@ -108,33 +101,26 @@ The bot uses the Machine Learning model for news classification and the sentimen
 
 ```bash
 git clone https://github.com/DavitHarutyunyan147/ML_news_bot.git
-```
-
-### 2. Navigate to the Project Directory
-
-```bash
 cd ML_news_bot
 ```
 
-### 3. Create a Virtual Environment
+### 2. Create and Activate a Virtual Environment
+
+On Windows:
 
 ```bash
 python -m venv venv
+venv\\Scripts\\activate
 ```
 
-Activate it on Windows:
+On Linux or macOS:
 
 ```bash
-venv\Scripts\activate
-```
-
-Activate it on Linux or macOS:
-
-```bash
+python -m venv venv
 source venv/bin/activate
 ```
 
-### 4. Install Dependencies
+### 3. Install Dependencies
 
 ```bash
 python -m pip install -r requirements.txt
@@ -142,87 +128,86 @@ python -m pip install -r requirements.txt
 
 ## Configuration
 
-Before running the Telegram bot, prepare the required configuration files.
-
 ### Telegram Bot Token
 
-Create a file named `token.txt` in the project directory and place your Telegram Bot API token inside it.
+Create a file named `token.txt` in the project directory and put your Telegram Bot API token inside it:
 
 ```text
 YOUR_TELEGRAM_BOT_TOKEN
 ```
 
-You can obtain a bot token through [BotFather](https://t.me/BotFather).
+You can create a Telegram bot and obtain its token through [BotFather](https://t.me/BotFather).
 
-### Machine Learning Model
-
-Place your trained Machine Learning model in the project directory and name it:
-
-```text
-model.pkl
-```
-
-The bot uses Joblib to load the model.
-
-**Important:** The model file and Telegram token are required locally but are not included in the public repository.
+Do not publish your real token or commit `token.txt` to GitHub.
 
 ## Usage
 
-### Run the News Scraper
+Run the commands in the following order.
 
-To collect news articles and generate the dataset:
+### 1. Scrape the News Dataset
+
+```bash
+python parser.py
+```
+
+This creates `news.csv` in the project directory.
+
+### 2. Train the Machine Learning Model
+
+After the dataset has been generated:
 
 ```bash
 python train.py
 ```
 
-The collected articles are saved in:
+This evaluates the model on the test split and saves the fitted model as `model.pkl`.
 
-```text
-news.csv
-```
+### 3. Start the Telegram Bot
 
-### Run the Telegram Bot
-
-After configuring `token.txt` and placing `model.pkl` in the project directory, start the bot:
+Make sure `token.txt` and `model.pkl` are present, then run:
 
 ```bash
 python bot.py
 ```
 
-The bot will connect to Telegram and start listening for incoming messages.
+Send the bot a text message containing at least 20 characters. It will return a predicted news category and the sentiment estimate.
+
+## Local Files
+
+The following files are generated or supplied locally and are not included in the repository:
+
+- `token.txt` — your private Telegram bot token.
+- `news.csv` — the scraped dataset.
+- `model.pkl` — the trained Machine Learning model.
+
+You can regenerate `news.csv` and `model.pkl` by following the Usage instructions.
 
 ## Current Limitations
 
-Although the project combines several useful technologies, it has some limitations:
-
-- Sentiment analysis relies on predefined keywords and does not fully understand context, sarcasm, or negation.
-- Machine Learning predictions depend on the quality and diversity of the training dataset.
-- The classification component requires an existing compatible model file.
-- Web scraping depends on the structure and availability of the source website.
-- The project currently focuses on a limited number of Armenian news categories.
+- The scraper depends on Aravot.am's website structure and availability. Changes to the website may require parser updates.
+- The requested dataset size is a target, not a guarantee; some articles may fail to download or parse.
+- Model quality depends on the size, balance, and quality of the collected dataset.
+- The current training script uses a single train/test split and does not include a separate final validation dataset.
+- The sentiment component relies on keyword matching and does not reliably understand context, negation, or sarcasm.
+- The sentiment percentages are heuristic scores, not calibrated probabilities.
+- The bot requires a compatible local `model.pkl` file and a valid Telegram token.
 
 ## Future Improvements
 
-Possible improvements include:
-
-- Developing a dedicated Machine Learning training pipeline.
-- Improving classification accuracy through dataset expansion and model evaluation.
-- Implementing more advanced Natural Language Processing techniques for Armenian.
-- Replacing keyword-based sentiment analysis with a trained sentiment classification model.
-- Adding more Armenian news sources.
-- Introducing automated model retraining.
-- Improving Telegram bot functionality and user experience.
-- Adding unit tests and more comprehensive error handling.
+- Add more Armenian news sources and expand the dataset.
+- Improve article extraction and make scraping more resilient to website changes.
+- Evaluate the classifier with additional metrics and more robust validation.
+- Experiment with other text-classification algorithms and Armenian NLP methods.
+- Improve sentiment analysis with a trained Armenian-language model.
+- Add automated tests and more detailed logging.
+- Improve bot commands and user interaction.
 
 ## Project Purpose
 
-This project was developed as a practical exploration of Python programming, Web Scraping, Machine Learning, and Telegram Bot development.
-
-It demonstrates how different Python technologies can be integrated into a single application to collect, process, and analyze real-world textual data.
+This project is a practical exploration of Python development, web scraping, text classification, and Telegram bot integration. It demonstrates a workflow from collecting textual data to training a model and making predictions through a messaging interface.
 
 ---
 
 **Author:** [Davit Harutyunyan](https://github.com/DavitHarutyunyan147)
 
-**GitHub Repository:** [ML_news_bot](https://github.com/DavitHarutyunyan147/ML_news_bot)
+**Repository:** [ML_news_bot](https://github.com/DavitHarutyunyan147/ML_news_bot)
